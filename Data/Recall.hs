@@ -45,9 +45,6 @@ instance Memo a => Memo [a] where
     fromTable (TList e _) [] = e
     fromTable (TList _ t) (x:xs) = fromTable (fromTable t x) xs
 
--- instance Memo a1 => Memo (a0 -> a1) where
---     data
-
 ------------------
 -- Plain old array
 ------------------
@@ -65,24 +62,24 @@ instance (Bounded a, Ix a) => Memo (BoundedIx a) where
 -- Binary search trees
 ----------------------
 
+-- class Scale a where
+--     avg :: a
+
 newtype BoundedEnum a = BoundedEnum { getBoundedEnum :: a }
     deriving (Eq, Ord, Bounded, Enum)
 
 instance (Bounded a, Enum a) => Memo (BoundedEnum a) where
-    data Table (BoundedIntegral a) b = Leaf
-                                     | Branch (BoundedIntegral a)
-                                              b
-                                              (Table (BoundedIntegral a) b)
-                                              (Table (BoundedIntegral a) b)
+    data Table (BoundedIntegral a) b = Leaf | Branch Int b (Table Int b) (Table Int b)
     toTable f = go (fromEnum minBound) (fromEnum maxBound)
       where go lo hi = if lo > hi
                        then Leaf
                        else let mid = (lo + hi) `div` 2
-                            in Branch mid (f mid) (go lo (mid - 1)) (go (mid + 1) hi)
+                            in Branch mid (f $ fromEnum mid) (go lo (mid - 1)) (go (mid + 1) hi)
     fromTable t a = go t
       where
-        go (Branch x y l r) | a == x = y
-                            | a > x = go l
+        e = fromEnum a
+        go (Branch x y l r) | e == x = y
+                            | e > x = go l
                             | otherwise = go r
         go Leaf = error "wat."
 
