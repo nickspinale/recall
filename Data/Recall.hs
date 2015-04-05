@@ -1,5 +1,6 @@
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module Data.Recall
     ( Memo
@@ -15,6 +16,15 @@ class Memo a where
 
 memoize :: Memo a => (a -> b) -> a -> b
 memoize = fromTable . toTable
+
+asArray :: (Bounded a, Ix a) => (a -> b) -> a -> b
+asArray f = memoize (f . getAsArray) . AsArray
+
+asEnumTree :: (Bounded a, Enum a) => (a -> b) -> a -> b
+asEnumTree f = memoize (f . getAsEnumTree) . AsEnumTree
+
+asTree :: (Bounded a, Integral a) => (a -> b) -> a -> b
+asTree f = memoize (f . getAsTree) . AsTree
 
 ------------------
 -- Basic instances
@@ -49,58 +59,52 @@ instance Memo a => Memo [a] where
 -- Plain old array
 ------------------
 
-newtype BoundedIx a = BoundedIx { getBoundedIx :: a }
-    deriving (Eq, Ord, Bounded, Ix)
+newtype AsArray a = AsArray { getAsArray :: a }
 
-instance (Bounded a, Ix a) => Memo (BoundedIx a) where
-    data Table (BoundedIx a) b = TArray (Array (BoundedIx a) b)
-    toTable f = TArray . listArray bounds . map f $ range bounds
+instance (Bounded a, Ix a) => Memo (AsArray a) where
+    data Table (AsArray a) b = TAsArray (Array a b)
+    toTable f = TAsArray . listArray bounds . map (f . AsArray) $ range bounds
       where bounds = (minBound, maxBound)
-    fromTable (TArray t) a = t ! a
+    fromTable (TAsArray t) (AsArray a) = t ! a
 
-----------------------
--- Binary search trees
-----------------------
+------------------------------------
+-- Intances using binary search tree
+------------------------------------
 
--- class Scale a where
---     avg :: a
+newtype AsEnumTree a = AsEnumTree { getAsEnumTree :: a }
 
-newtype BoundedEnum a = BoundedEnum { getBoundedEnum :: a }
-    deriving (Eq, Ord, Bounded, Enum)
+instance forall a. (Bounded a, Enum a) => Memo (AsEnumTree a) where
+    data Table (AsEnumTree a) b = TAsEnumTree (Tree Int b)
+    toTable f = TAsEnumTree $ mkTree (f . AsEnumTree . toEnum)
+                                     (fromEnum (minBound :: a))
+                                     (fromEnum (maxBound :: a))
+    fromTable (TAsEnumTree t) (AsEnumTree a) = unsafeLookup t $ fromEnum a
 
-instance (Bounded a, Enum a) => Memo (BoundedEnum a) where
-    data Table (BoundedIntegral a) b = Leaf | Branch Int b (Table Int b) (Table Int b)
-    toTable f = go (fromEnum minBound) (fromEnum maxBound)
-      where go lo hi = if lo > hi
-                       then Leaf
-                       else let mid = (lo + hi) `div` 2
-                            in Branch mid (f $ fromEnum mid) (go lo (mid - 1)) (go (mid + 1) hi)
-    fromTable t a = go t
-      where
-        e = fromEnum a
-        go (Branch x y l r) | e == x = y
-                            | e > x = go l
-                            | otherwise = go r
-        go Leaf = error "wat."
+newtype AsTree a = AsTree { getAsTree :: a }
 
+instance (Bounded a, Integral a) => Memo (AsTree a) where
+    data Table (AsTree a) b = TAsTree (Tree a b)
+    toTable f = TAsTree $ mkTree (f . AsTree) minBound maxBound
+    fromTable (TAsTree t) (AsTree a) = unsafeLookup t a
 
-newtype BoundedIntegral a = BoundedIntegral { getBoundedIntegral :: a }
-    deriving (Eq, Ord, Bounded, Num, Integral, Real, Enum)
+-----------------------------
+-- Generic binary search tree
+-----------------------------
 
-instance (Bounded a, Integral a) => Memo (BoundedIntegral a) where
-    data Table (BoundedIntegral a) b = Leaf
-                                     | Branch (BoundedIntegral a)
-                                              b
-                                              (Table (BoundedIntegral a) b)
-                                              (Table (BoundedIntegral a) b)
-    toTable f = go minBound maxBound
-      where go lo hi = if lo > hi
-                       then Leaf
-                       else let mid = (lo + hi) `div` 2
-                            in Branch mid (f mid) (go lo (mid - 1)) (go (mid + 1) hi)
-    fromTable t a = go t
-      where
-        go (Branch x y l r) | a == x = y
-                            | a > x = go l
-                            | otherwise = go r
-        go Leaf = error "wat."
+data Tree a b = Node a b (Tree a b) (Tree a b)
+
+unsafeLookup :: Ord a => Tree a b -> a -> b
+unsafeLookup t a = go t
+  where
+    go (Node x y l r) = case compare a x of LT -> go l
+                                            GT -> go r
+                                            EQ -> y
+
+mkTree :: Integral a => (a -> b) -> a -> a -> Tree a b
+mkTree f min max = go min max
+  where
+    go lo hi = if lo > hi
+               then undefined
+               else let mid = (lo + hi) `div` 2
+                    in Node mid (f mid) (go (mid + 1) hi) (go lo (mid - 1))
+
