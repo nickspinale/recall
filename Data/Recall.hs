@@ -82,7 +82,7 @@ memoize = fromTable . toTable
 asArray :: (Bounded a, Ix a) => (a -> b) -> a -> b
 asArray f = memoize (f . getAsArray) . AsArray
 
--- | Memoize a function with a boudned domain into a tree according to its domain's enum instance.
+-- | Memoize a function with a bounded domain into a tree according to its domain's enum instance.
 asEnumTree :: (Bounded a, Enum a) => (a -> b) -> a -> b
 asEnumTree f = memoize (f . getEnumTree) . AsEnumTree
 
