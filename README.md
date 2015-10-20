@@ -10,7 +10,7 @@ import Data.Recall
 f :: [Maybe Bool] -> Maybe Bool
 f n = fmap and . sequenceA
 
--- function that lazily populates and accesses a lazy trie holding the reults of past calls
+-- function that lazily populates and accesses a lazy trie holding the results of past calls
 f' :: [Maybe Bool] -> Maybe Bool
 f' = memoize f
 ```
